@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexaura_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nexaura_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexaura_secure_password_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-nexaura_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - nexaura_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexaura_admin} -d ${POSTGRES_DB:-nexaura_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nexaura_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nexaura_admin}:${POSTGRES_PASSWORD:-nexaura_secure_password_2026}@postgres:5432/${POSTGRES_DB:-nexaura_db}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET}
+      WEB_CLIENT_URL: ${WEB_CLIENT_URL:-http://localhost:3000}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@nexaura.gov.in}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-SuperAdmin@Nexaura2026!}
+    ports:
+      - "5000:5000"
+    volumes:
+      - nexaura_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: nexaura_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:5000/api/v1
+    ports:
+      - "3000:3000"
+
+volumes:
+  nexaura_pgdata:
+  nexaura_uploads:

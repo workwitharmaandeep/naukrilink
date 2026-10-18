@@ -1,0 +1,776 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =============================================================
+// ENUMS
+// =============================================================
+
+enum UserRole {
+  STUDENT
+  COMPANY
+  COLLEGE
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum WorkMode {
+  REMOTE
+  ONSITE
+  HYBRID
+}
+
+enum InternshipStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SHORTLISTED
+  INTERVIEW
+  SELECTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum QuestionStatus {
+  DRAFT
+  APPROVED
+  ARCHIVED
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuizAttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+  TIMED_OUT
+  ABANDONED
+}
+
+enum InterviewStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum InterviewSender {
+  AI
+  STUDENT
+}
+
+enum MentorshipStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum EnrolmentStatus {
+  ENROLLED
+  ATTENDED
+  CANCELLED
+}
+
+enum CheckStatus {
+  PASSED
+  FAILED
+  WARNING
+  PENDING
+  MANUAL_REVIEW
+}
+
+enum ReportTargetType {
+  COMPANY
+  INTERNSHIP
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+enum NotificationType {
+  SYSTEM
+  APPLICATION_UPDATE
+  VERIFICATION_UPDATE
+  MENTORSHIP_REMINDER
+  QUIZ_RESULT
+  NEW_MATCH
+}
+
+// =============================================================
+// USER & AUTHENTICATION
+// =============================================================
+
+model User {
+  id                   String      @id @default(uuid()) @db.Uuid
+  email                String      @unique @db.VarChar(255)
+  passwordHash         String      @map("password_hash") @db.VarChar(255)
+  role                 UserRole    @default(STUDENT)
+  status               UserStatus  @default(ACTIVE)
+  emailVerified        Boolean     @default(false) @map("email_verified")
+  emailVerifyToken     String?     @map("email_verify_token") @db.VarChar(255)
+  emailVerifyExpires   DateTime?   @map("email_verify_expires")
+  passwordResetToken   String?     @map("password_reset_token") @db.VarChar(255)
+  passwordResetExpires DateTime?   @map("password_reset_expires")
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  studentProfile       StudentProfile?
+  companyProfile       CompanyProfile?
+  collegeProfile       CollegeProfile?
+  refreshTokens        RefreshToken[]
+  notifications        Notification[]
+  feedback             Feedback[]
+  events               Event[]
+  auditLogs            AuditLog[]
+  reportsFiled         Report[]                   @relation("ReportReporter")
+  reportsResolved      Report[]                   @relation("ReportResolver")
+  createdQuestions     QuizQuestion[]             @relation("QuestionAuthor")
+  statusHistoryChanges ApplicationStatusHistory[] @relation("StatusChangeAuthor")
+  verificationReviews  VerificationRequest[]      @relation("VerificationReviewer")
+  uploadedDocuments    Document[]
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(255)
+  userId    String   @map("user_id") @db.Uuid
+  familyId  String   @map("family_id") @db.Uuid
+  isRevoked Boolean  @default(false) @map("is_revoked")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+// =============================================================
+// PROFILES
+// =============================================================
+
+model StudentProfile {
+  id                      String      @id @default(uuid()) @db.Uuid
+  userId                  String      @unique @map("user_id") @db.Uuid
+  collegeProfileId        String?     @map("college_profile_id") @db.Uuid
+  fullName                String      @map("full_name") @db.VarChar(255)
+  phone                   String?     @db.VarChar(32)
+  collegeName             String      @map("college_name") @db.VarChar(255)
+  degree                  String      @db.VarChar(128)
+  branch                  String      @db.VarChar(128)
+  graduationYear          Int         @map("graduation_year")
+  cgpa                    Float?
+  locationCity            String?     @map("location_city") @db.VarChar(128)
+  locationState           String?     @map("location_state") @db.VarChar(128)
+  preferredWorkModes      WorkMode[]  @default([REMOTE]) @map("preferred_work_modes")
+  preferredDurationMonths Int?        @map("preferred_duration_months")
+  availabilityDate        DateTime?   @map("availability_date")
+  resumeUrl               String?     @map("resume_url") @db.VarChar(512)
+  resumeFilename          String?     @map("resume_filename") @db.VarChar(255)
+  githubUrl               String?     @map("github_url") @db.VarChar(255)
+  linkedinUrl             String?     @map("linkedin_url") @db.VarChar(255)
+  portfolioUrl            String?     @map("portfolio_url") @db.VarChar(255)
+  bio                     String?     @db.Text
+  profileCompleteness     Int         @default(0) @map("profile_completeness")
+  createdAt               DateTime    @default(now()) @map("created_at")
+  updatedAt               DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  college              CollegeProfile?       @relation(fields: [collegeProfileId], references: [id], onDelete: SetNull)
+  skills               StudentSkill[]
+  applications         Application[]
+  quizAttempts         QuizAttempt[]
+  interviews           Interview[]
+  matchScores          MatchScore[]
+  mentorshipEnrolments MentorshipEnrolment[]
+
+  @@index([graduationYear])
+  @@index([locationCity, locationState])
+  @@map("student_profiles")
+}
+
+model CompanyProfile {
+  id                       String             @id @default(uuid()) @db.Uuid
+  userId                   String             @unique @map("user_id") @db.Uuid
+  legalName                String             @map("legal_name") @db.VarChar(255)
+  brandName                String             @map("brand_name") @db.VarChar(255)
+  industry                 String             @db.VarChar(128)
+  companySize              String             @map("company_size") @db.VarChar(64)
+  websiteUrl               String             @map("website_url") @db.VarChar(255)
+  logoUrl                  String?            @map("logo_url") @db.VarChar(512)
+  addressLine1             String             @map("address_line1") @db.VarChar(255)
+  addressLine2             String?            @map("address_line2") @db.VarChar(255)
+  city                     String             @db.VarChar(128)
+  state                    String             @db.VarChar(128)
+  pincode                  String             @db.VarChar(16)
+  gstin                    String?            @db.VarChar(32)
+  cin                      String?            @db.VarChar(32)
+  contactPersonName        String             @map("contact_person_name") @db.VarChar(255)
+  contactPersonPhone       String             @map("contact_person_phone") @db.VarChar(32)
+  contactPersonDesignation String             @map("contact_person_designation") @db.VarChar(128)
+  description              String             @db.Text
+  verificationStatus       VerificationStatus @default(UNVERIFIED) @map("verification_status")
+  verifiedAt               DateTime?          @map("verified_at")
+  verificationNotes        String?            @map("verification_notes") @db.Text
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  internships          Internship[]
+  mentorshipSessions   MentorshipSession[]
+  verificationRequests VerificationRequest[]
+  documents            Document[]
+
+  @@index([verificationStatus])
+  @@index([industry])
+  @@map("company_profiles")
+}
+
+model CollegeProfile {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @unique @map("user_id") @db.Uuid
+  institutionName    String    @map("institution_name") @db.VarChar(255)
+  aisheCode          String?   @map("aishe_code") @db.VarChar(64)
+  address            String    @db.VarChar(255)
+  city               String    @db.VarChar(128)
+  state              String    @db.VarChar(128)
+  contactPersonName  String    @map("contact_person_name") @db.VarChar(255)
+  contactPersonPhone String    @map("contact_person_phone") @db.VarChar(32)
+  contactPersonEmail String    @map("contact_person_email") @db.VarChar(255)
+  websiteUrl         String?   @map("website_url") @db.VarChar(255)
+  isVerified         Boolean   @default(false) @map("is_verified")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students StudentProfile[]
+
+  @@map("college_profiles")
+}
+
+// =============================================================
+// SKILLS & TAXONOMY
+// =============================================================
+
+model Skill {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(128)
+  category    String   @db.VarChar(128)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  studentSkills    StudentSkill[]
+  internshipSkills InternshipSkill[]
+  quizQuestions    QuizQuestion[]
+
+  @@index([category])
+  @@map("skills")
+}
+
+model StudentSkill {
+  id               String     @id @default(uuid()) @db.Uuid
+  studentProfileId String     @map("student_profile_id") @db.Uuid
+  skillId          String     @map("skill_id") @db.Uuid
+  declaredLevel    SkillLevel @default(BEGINNER) @map("declared_level")
+  verifiedScore    Float?     @map("verified_score")
+  lastAssessedAt   DateTime?  @map("last_assessed_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  skill          Skill          @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([studentProfileId, skillId])
+  @@map("student_skills")
+}
+
+// =============================================================
+// INTERNSHIPS & APPLICATIONS
+// =============================================================
+
+model Internship {
+  id                         String           @id @default(uuid()) @db.Uuid
+  companyProfileId           String           @map("company_profile_id") @db.Uuid
+  title                      String           @db.VarChar(255)
+  category                   String           @db.VarChar(128)
+  description                String           @db.Text
+  responsibilities           String           @db.Text
+  eligibilityDegrees         String[]         @default([]) @map("eligibility_degrees")
+  eligibilityBranches        String[]         @default([]) @map("eligibility_branches")
+  eligibilityGraduationYears Int[]            @default([]) @map("eligibility_graduation_years")
+  minCgpa                    Float?           @map("min_cgpa")
+  workMode                   WorkMode         @default(REMOTE) @map("work_mode")
+  locationCity               String?          @map("location_city") @db.VarChar(128)
+  locationState              String?          @map("location_state") @db.VarChar(128)
+  durationMonths             Int              @map("duration_months")
+  stipendAmount              Int?             @map("stipend_amount")
+  isUnpaid                   Boolean          @default(false) @map("is_unpaid")
+  openingsCount              Int              @default(1) @map("openings_count")
+  deadline                   DateTime
+  status                     InternshipStatus @default(DRAFT)
+  createdAt                  DateTime         @default(now()) @map("created_at")
+  updatedAt                  DateTime         @updatedAt @map("updated_at")
+
+  company        CompanyProfile    @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  requiredSkills InternshipSkill[]
+  applications   Application[]
+  matchScores    MatchScore[]
+
+  @@index([status])
+  @@index([category])
+  @@index([workMode])
+  @@index([deadline])
+  @@map("internships")
+}
+
+model InternshipSkill {
+  id           String     @id @default(uuid()) @db.Uuid
+  internshipId String     @map("internship_id") @db.Uuid
+  skillId      String     @map("skill_id") @db.Uuid
+  minLevel     SkillLevel @default(BEGINNER) @map("min_level")
+  isRequired   Boolean    @default(true) @map("is_required")
+
+  internship Internship @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  skill      Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([internshipId, skillId])
+  @@map("internship_skills")
+}
+
+model Application {
+  id                 String            @id @default(uuid()) @db.Uuid
+  internshipId       String            @map("internship_id") @db.Uuid
+  studentProfileId   String            @map("student_profile_id") @db.Uuid
+  currentStatus      ApplicationStatus @default(APPLIED) @map("current_status")
+  coverNote          String?           @map("cover_note") @db.Text
+  matchScoreSnapshot Float?            @map("match_score_snapshot")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  internship     Internship                 @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile             @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  statusHistory  ApplicationStatusHistory[]
+
+  @@unique([internshipId, studentProfileId])
+  @@index([currentStatus])
+  @@map("applications")
+}
+
+model ApplicationStatusHistory {
+  id            String             @id @default(uuid()) @db.Uuid
+  applicationId String             @map("application_id") @db.Uuid
+  fromStatus    ApplicationStatus? @map("from_status")
+  toStatus      ApplicationStatus  @map("to_status")
+  changedById   String?            @map("changed_by_id") @db.Uuid
+  notes         String?            @db.Text
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedBy   User?       @relation("StatusChangeAuthor", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@map("application_status_history")
+}
+
+// =============================================================
+// VERIFICATION SYSTEM
+// =============================================================
+
+model VerificationRequest {
+  id               String             @id @default(uuid()) @db.Uuid
+  companyProfileId String             @map("company_profile_id") @db.Uuid
+  gstinSubmitted   String?            @map("gstin_submitted") @db.VarChar(32)
+  cinSubmitted     String?            @map("cin_submitted") @db.VarChar(32)
+  websiteSubmitted String             @map("website_submitted") @db.VarChar(255)
+  status           VerificationStatus @default(PENDING_REVIEW)
+  reviewedById     String?            @map("reviewed_by_id") @db.Uuid
+  reviewedAt       DateTime?          @map("reviewed_at")
+  adminNotes       String?            @map("admin_notes") @db.Text
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  company    CompanyProfile      @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  reviewedBy User?               @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  checks     VerificationCheck[]
+  documents  Document[]
+
+  @@index([status])
+  @@map("verification_requests")
+}
+
+model VerificationCheck {
+  id                    String      @id @default(uuid()) @db.Uuid
+  verificationRequestId String      @map("verification_request_id") @db.Uuid
+  checkType             String      @map("check_type") @db.VarChar(64)
+  status                CheckStatus @default(PENDING)
+  providerName          String      @map("provider_name") @db.VarChar(64)
+  rawResponseSummary    Json?       @map("raw_response_summary")
+  details               String?     @db.Text
+  executedAt            DateTime    @default(now()) @map("executed_at")
+
+  verificationRequest VerificationRequest @relation(fields: [verificationRequestId], references: [id], onDelete: Cascade)
+
+  @@index([verificationRequestId])
+  @@index([checkType])
+  @@map("verification_checks")
+}
+
+model Document {
+  id                    String   @id @default(uuid()) @db.Uuid
+  companyProfileId      String?  @map("company_profile_id") @db.Uuid
+  verificationRequestId String?  @map("verification_request_id") @db.Uuid
+  title                 String   @db.VarChar(255)
+  fileUrl               String   @map("file_url") @db.VarChar(512)
+  fileType              String   @map("file_type") @db.VarChar(64)
+  fileSize              Int      @map("file_size")
+  originalFilename      String   @map("original_filename") @db.VarChar(255)
+  uploadedById          String   @map("uploaded_by_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  company             CompanyProfile?      @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  verificationRequest VerificationRequest? @relation(fields: [verificationRequestId], references: [id], onDelete: SetNull)
+  uploadedBy          User                 @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@map("documents")
+}
+
+model Report {
+  id              String           @id @default(uuid()) @db.Uuid
+  reportedById    String           @map("reported_by_id") @db.Uuid
+  targetType      ReportTargetType @map("target_type")
+  targetId        String           @map("target_id") @db.Uuid
+  reason          String           @db.VarChar(255)
+  details         String?          @db.Text
+  status          ReportStatus     @default(PENDING)
+  resolvedById    String?          @map("resolved_by_id") @db.Uuid
+  resolutionNotes String?          @map("resolution_notes") @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  reportedBy User  @relation("ReportReporter", fields: [reportedById], references: [id], onDelete: Cascade)
+  resolvedBy User? @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@map("reports")
+}
+
+// =============================================================
+// SKILL ASSESSMENTS (TIMED QUIZZES)
+// =============================================================
+
+model QuizQuestion {
+  id                 String             @id @default(uuid()) @db.Uuid
+  skillId            String             @map("skill_id") @db.Uuid
+  questionText       String             @map("question_text") @db.Text
+  codeSnippet        String?            @map("code_snippet") @db.Text
+  options            Json               // Array of string options: ["A", "B", "C", "D"]
+  correctAnswerIndex Int                @map("correct_answer_index")
+  explanation        String             @db.Text
+  difficulty         QuestionDifficulty @default(MEDIUM)
+  status             QuestionStatus     @default(DRAFT)
+  authorId           String?            @map("author_id") @db.Uuid
+  isAiGenerated      Boolean            @default(false) @map("is_ai_generated")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  skill   Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  author  User?        @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  answers QuizAnswer[]
+
+  @@index([skillId, status, difficulty])
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id               String            @id @default(uuid()) @db.Uuid
+  studentProfileId String            @map("student_profile_id") @db.Uuid
+  skillId          String            @map("skill_id") @db.Uuid
+  totalQuestions   Int               @map("total_questions")
+  correctCount     Int               @map("correct_count")
+  scorePercentage  Float             @map("score_percentage")
+  assessedLevel    SkillLevel        @map("assessed_level")
+  timeSpentSeconds Int               @map("time_spent_seconds")
+  status           QuizAttemptStatus @default(IN_PROGRESS)
+  startedAt        DateTime          @default(now()) @map("started_at")
+  completedAt      DateTime?         @map("completed_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  answers        QuizAnswer[]
+
+  @@index([studentProfileId, skillId, createdAt])
+  @@map("quiz_attempts")
+}
+
+model QuizAnswer {
+  id                  String   @id @default(uuid()) @db.Uuid
+  quizAttemptId       String   @map("quiz_attempt_id") @db.Uuid
+  questionId          String   @map("question_id") @db.Uuid
+  selectedOptionIndex Int?     @map("selected_option_index")
+  isCorrect           Boolean  @map("is_correct")
+  timeSpentSeconds    Int      @map("time_spent_seconds")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  quizAttempt QuizAttempt  @relation(fields: [quizAttemptId], references: [id], onDelete: Cascade)
+  question    QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([quizAttemptId])
+  @@map("quiz_answers")
+}
+
+// =============================================================
+// AI INTERVIEW SYSTEM
+// =============================================================
+
+model Interview {
+  id                String          @id @default(uuid()) @db.Uuid
+  studentProfileId  String          @map("student_profile_id") @db.Uuid
+  targetRole        String          @map("target_role") @db.VarChar(128)
+  primarySkill      String          @map("primary_skill") @db.VarChar(128)
+  status            InterviewStatus @default(IN_PROGRESS)
+  transcriptConsent Boolean         @default(false) @map("transcript_consent")
+  startedAt         DateTime        @default(now()) @map("started_at")
+  completedAt       DateTime?       @map("completed_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  studentProfile StudentProfile       @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  messages       InterviewMessage[]
+  evaluation     InterviewEvaluation?
+
+  @@index([studentProfileId])
+  @@map("interviews")
+}
+
+model InterviewMessage {
+  id            String          @id @default(uuid()) @db.Uuid
+  interviewId   String          @map("interview_id") @db.Uuid
+  sender        InterviewSender
+  messageText   String          @map("message_text") @db.Text
+  sequenceOrder Int             @map("sequence_order")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([interviewId, sequenceOrder])
+  @@map("interview_messages")
+}
+
+model InterviewEvaluation {
+  id                  String   @id @default(uuid()) @db.Uuid
+  interviewId         String   @unique @map("interview_id") @db.Uuid
+  knowledgeScore      Float    @map("knowledge_score")
+  problemSolvingScore Float    @map("problem_solving_score")
+  communicationScore  Float    @map("communication_score")
+  overallScore        Float    @map("overall_score")
+  strengths           String[] @default([])
+  improvementAreas    String[] @default([]) @map("improvement_areas")
+  executiveSummary    String   @map("executive_summary") @db.Text
+  skillIndicators     Json     @map("skill_indicators")
+  rawAiResponse       Json?    @map("raw_ai_response")
+  modelUsed           String   @map("model_used") @db.VarChar(64)
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@map("interview_evaluations")
+}
+
+// =============================================================
+// SMART MATCHING ENGINE
+// =============================================================
+
+model MatchScore {
+  id                   String   @id @default(uuid()) @db.Uuid
+  studentProfileId     String   @map("student_profile_id") @db.Uuid
+  internshipId         String   @map("internship_id") @db.Uuid
+  matchPercentage      Float    @map("match_percentage")
+  matchedSkills        String[] @default([]) @map("matched_skills")
+  missingSkills        String[] @default([]) @map("missing_skills")
+  explanationText      String   @map("explanation_text") @db.Text
+  calculationBreakdown Json     @map("calculation_breakdown")
+  computedAt           DateTime @default(now()) @map("computed_at")
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  internship     Internship     @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+
+  @@unique([studentProfileId, internshipId])
+  @@index([studentProfileId, matchPercentage])
+  @@map("match_scores")
+}
+
+// =============================================================
+// COMPANY-LED MENTORSHIP
+// =============================================================
+
+model MentorshipSession {
+  id               String           @id @default(uuid()) @db.Uuid
+  companyProfileId String           @map("company_profile_id") @db.Uuid
+  title            String           @db.VarChar(255)
+  topic            String           @db.VarChar(128)
+  description      String           @db.Text
+  targetSkills     String[]         @default([]) @map("target_skills")
+  targetRoles      String[]         @default([]) @map("target_roles")
+  status           MentorshipStatus @default(SCHEDULED)
+  meetingLink      String?          @map("meeting_link") @db.VarChar(512)
+  mode             WorkMode         @default(REMOTE)
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  company CompanyProfile   @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  slots   MentorshipSlot[]
+
+  @@index([status])
+  @@map("mentorship_sessions")
+}
+
+model MentorshipSlot {
+  id                  String   @id @default(uuid()) @db.Uuid
+  mentorshipSessionId String   @map("mentorship_session_id") @db.Uuid
+  startTime           DateTime @map("start_time") // Stored in UTC
+  endTime             DateTime @map("end_time")   // Stored in UTC
+  capacity            Int      @default(1)
+  bookedCount         Int      @default(0) @map("booked_count")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  session    MentorshipSession     @relation(fields: [mentorshipSessionId], references: [id], onDelete: Cascade)
+  enrolments MentorshipEnrolment[]
+
+  @@index([startTime, endTime])
+  @@map("mentorship_slots")
+}
+
+model MentorshipEnrolment {
+  id               String          @id @default(uuid()) @db.Uuid
+  mentorshipSlotId String          @map("mentorship_slot_id") @db.Uuid
+  studentProfileId String          @map("student_profile_id") @db.Uuid
+  status           EnrolmentStatus @default(ENROLLED)
+  attendedAt       DateTime?       @map("attended_at")
+  cancelledAt      DateTime?       @map("cancelled_at")
+  reminder24hSent  Boolean         @default(false) @map("reminder_24h_sent")
+  reminder1hSent   Boolean         @default(false) @map("reminder_1h_sent")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  slot           MentorshipSlot @relation(fields: [mentorshipSlotId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([mentorshipSlotId, studentProfileId])
+  @@index([studentProfileId])
+  @@map("mentorship_enrolments")
+}
+
+// =============================================================
+// NOTIFICATIONS, FEEDBACK, EVENTS, AUDIT
+// =============================================================
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  title     String           @db.VarChar(255)
+  message   String           @db.Text
+  type      NotificationType @default(SYSTEM)
+  linkUrl   String?          @map("link_url") @db.VarChar(512)
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Feedback {
+  id                      String   @id @default(uuid()) @db.Uuid
+  userId                  String?  @map("user_id") @db.Uuid
+  rating                  Int?
+  category                String   @db.VarChar(64)
+  feedbackText            String?  @map("feedback_text") @db.Text
+  isRecommendationHelpful Boolean? @map("is_recommendation_helpful")
+  contextData             Json?    @map("context_data")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("feedback")
+}
+
+model Event {
+  id         String   @id @default(uuid()) @db.Uuid
+  eventType  String   @map("event_type") @db.VarChar(128)
+  userId     String?  @map("user_id") @db.Uuid
+  entityType String?  @map("entity_type") @db.VarChar(64)
+  entityId   String?  @map("entity_id") @db.Uuid
+  metadata   Json?
+  ipAddress  String?  @map("ip_address") @db.VarChar(64)
+  userAgent  String?  @map("user_agent") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@map("events")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  action         String   @db.VarChar(128)
+  targetResource String   @map("target_resource") @db.VarChar(128)
+  targetId       String?  @map("target_id") @db.VarChar(128)
+  details        Json?
+  ipAddress      String?  @map("ip_address") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
